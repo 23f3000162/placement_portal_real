@@ -1,0 +1,33 @@
+# Python
+backend/.venv/
+backend/.venv_app/
+backend/.venv_win/
+backend/venv/
+backend/__pycache__/
+*.pyc
+
+# Environment
+backend/.env
+
+# Database
+backend/instance/
+instance/
+*.db
+
+# Celery
+backend/celerybeat-schedule*
+
+# Uploads
+backend/uploads/
+
+# Vue
+frontend/node_modules/
+frontend/dist/
+
+# VS Code
+frontend/.vscode/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
