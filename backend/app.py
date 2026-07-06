@@ -5,7 +5,8 @@ from flask import Flask, send_from_directory
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash
 
-load_dotenv()
+dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
+load_dotenv(dotenv_path=dotenv_path)
 
 from extension import db, jwt, cache, mail, celery
 from models.auth import User
@@ -38,19 +39,29 @@ app.config["CACHE_REDIS_URL"] = REDIS_URL
 app.config["CACHE_DEFAULT_TIMEOUT"] = 300  # 5 minutes
 
 # mail settings
-app.config["MAIL_SERVER"] = os.environ.get("MAIL_SERVER", "smtp.gmail.com")
+app.config["MAIL_SERVER"] = os.environ.get("MAIL_SERVER", "smtp.gmail.com").strip()
 app.config["MAIL_PORT"] = int(os.environ.get("MAIL_PORT", 587))
-app.config["MAIL_USE_TLS"] = True
-app.config["MAIL_USERNAME"] = os.environ.get("MAIL_USERNAME", "")
-app.config["MAIL_PASSWORD"] = os.environ.get("MAIL_PASSWORD", "")
-app.config["MAIL_DEFAULT_SENDER"] = os.environ.get("MAIL_USERNAME", "noreply@placement.com")
+app.config["MAIL_USE_TLS"] = os.environ.get("MAIL_USE_TLS", "True").strip().lower() in ("true", "1", "yes")
+app.config["MAIL_USE_SSL"] = os.environ.get("MAIL_USE_SSL", "False").strip().lower() in ("true", "1", "yes")
+app.config["MAIL_USERNAME"] = os.environ.get("MAIL_USERNAME", "").strip()
+# Remove any accidental spaces from gmail App Password
+app.config["MAIL_PASSWORD"] = os.environ.get("MAIL_PASSWORD", "").strip().replace(" ", "")
+app.config["MAIL_DEFAULT_SENDER"] = (
+    os.environ.get("MAIL_DEFAULT_SENDER", "").strip()
+    or app.config["MAIL_USERNAME"]
+    or "noreply@placement.com"
+)
+app.config["MAIL_OVERRIDE_RECIPIENTS"] = os.environ.get("MAIL_OVERRIDE_RECIPIENTS", "").strip()
+app.config["MAIL_STUDENT_RECIPIENTS"] = os.environ.get("MAIL_STUDENT_RECIPIENTS", "").strip()
+app.config["MAIL_STAFF_RECIPIENTS"] = os.environ.get("MAIL_STAFF_RECIPIENTS", "").strip()
+app.config["MAIL_SUPPRESS_SEND"] = os.environ.get("MAIL_SUPPRESS_SEND", "False").strip().lower() in ("true", "1", "yes")
 
 # connect extensions
 db.init_app(app)
 jwt.init_app(app)
 cache.init_app(app)
 mail.init_app(app)
-CORS(app)
+CORS(app, expose_headers=["Content-Disposition", "X-Mail-Sent", "X-Mail-Error"])
 
 # celery schedule
 celery.conf.update(
@@ -104,6 +115,9 @@ with app.app_context():
     for statement in (
         "ALTER TABLE user ADD COLUMN cgpa FLOAT",
         "ALTER TABLE user ADD COLUMN branch VARCHAR(100)",
+        "ALTER TABLE application ADD COLUMN interview_scheduled_at DATETIME",
+        "ALTER TABLE application ADD COLUMN interview_mode VARCHAR(50)",
+        "ALTER TABLE application ADD COLUMN interview_location VARCHAR(255)",
     ):
         try:
             with db.engine.connect() as conn:
@@ -112,9 +126,9 @@ with app.app_context():
         except Exception:
             pass
 
-    admin_email = os.environ.get("ADMIN_EMAIL") or app.config["MAIL_USERNAME"] or "admin@gmail.com"
-    admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
     admin_user = User.query.filter_by(role="admin").first()
+    admin_email = os.environ.get("ADMIN_EMAIL") or (admin_user.email if admin_user else "admin@gmail.com")
+    admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
 
     if not admin_user:
         db.session.add(User(
@@ -163,4 +177,53 @@ def download_export(filename):
 
 
 if __name__ == "__main__":
+    import subprocess
+    import atexit
+    import sys
+    import os
+    
+    # Only run background processes in the main reloader process
+    if os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        print("🚀 Starting Redis and Celery in the background...")
+        processes = []
+        
+        # Start redis
+        try:
+            if subprocess.call(["redis-cli", "ping"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) != 0:
+                p_redis = subprocess.Popen(["redis-server"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                processes.append(p_redis)
+                print("Redis started")
+            else:
+                print("Redis is already running")
+        except FileNotFoundError:
+            print("⚠️ redis-server not found, ensure redis is installed.")
+
+        # Start Celery worker
+        try:
+            p_worker = subprocess.Popen([sys.executable, "-m", "celery", "-A", "worker.celery", "worker", "--loglevel=info"], 
+                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            processes.append(p_worker)
+            print("Celery Worker started")
+        except Exception as e:
+            print(f"Failed to start Celery worker: {e}")
+            
+        # Start Celery beat
+        try:
+            p_beat = subprocess.Popen([sys.executable, "-m", "celery", "-A", "worker.celery", "beat", "--loglevel=info"], 
+                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            processes.append(p_beat)
+            print("Celery Beat started")
+        except Exception as e:
+            print(f"Failed to start Celery beat: {e}")
+            
+        def cleanup():
+            print("\n Stopping background services (Redis/Celery)...")
+            for p in processes:
+                try:
+                    p.terminate()
+                except:
+                    pass
+        
+        atexit.register(cleanup)
+
     app.run(debug=True)
