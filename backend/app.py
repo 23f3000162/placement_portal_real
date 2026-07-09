@@ -184,7 +184,7 @@ if __name__ == "__main__":
     
     # Only run background processes in the main reloader process
     if os.environ.get("WERKZEUG_RUN_MAIN") != "true":
-        print("🚀 Starting Redis and Celery in the background...")
+        print(" Starting Redis and Celery in the background...")
         processes = []
         
         # Start redis
@@ -196,9 +196,9 @@ if __name__ == "__main__":
             else:
                 print("Redis is already running")
         except FileNotFoundError:
-            print("⚠️ redis-server not found, ensure redis is installed.")
+            print(" redis-server not found, ensure redis is installed.")
 
-        # Start Celery worker
+        # Start Celery worker here
         try:
             p_worker = subprocess.Popen([sys.executable, "-m", "celery", "-A", "worker.celery", "worker", "--loglevel=info"], 
                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
