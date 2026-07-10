@@ -71,7 +71,7 @@ celery.conf.update(
     beat_schedule={
         "daily-reminders": {
             "task": "tasks.send_daily_reminders",
-            "schedule": crontab(hour=8, minute=0),
+            "schedule": crontab(hour=1, minute=16),
         },
         "monthly-report": {
             "task": "tasks.send_monthly_report",
@@ -113,6 +113,7 @@ with app.app_context():
         pass
 
     for statement in (
+        "ALTER TABLE company RENAME COLUMN comapny_name TO company_name",
         "ALTER TABLE user ADD COLUMN cgpa FLOAT",
         "ALTER TABLE user ADD COLUMN branch VARCHAR(100)",
         "ALTER TABLE application ADD COLUMN interview_scheduled_at DATETIME",

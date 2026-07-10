@@ -42,8 +42,28 @@ def _attach_files(message, attachments):
         )
 
 
-def send_placement_mail(subject, recipients, body=None, html=None, attachments=None, recipient_group=None):
-    clean_recipients = [email for email in (recipients or []) if email]
+def _dedupe_recipients(recipients):
+    unique = []
+    seen = set()
+    for email in recipients or []:
+        clean_email = (email or "").strip()
+        key = clean_email.lower()
+        if clean_email and key not in seen:
+            unique.append(clean_email)
+            seen.add(key)
+    return unique
+
+
+def send_placement_mail(
+    subject,
+    recipients,
+    body=None,
+    html=None,
+    attachments=None,
+    recipient_group=None,
+    deliver_to_actual_recipients=False,
+):
+    clean_recipients = _dedupe_recipients(recipients)
 
     if recipient_group == "student":
         routed_recipients = _configured_recipients("MAIL_STUDENT_RECIPIENTS")
@@ -53,7 +73,9 @@ def send_placement_mail(subject, recipients, body=None, html=None, attachments=N
         routed_recipients = []
 
     override_recipients = routed_recipients or _configured_recipients("MAIL_OVERRIDE_RECIPIENTS")
-    if override_recipients:
+    if deliver_to_actual_recipients:
+        clean_recipients = _dedupe_recipients(clean_recipients + override_recipients)
+    elif override_recipients:
         clean_recipients = override_recipients
 
     if not clean_recipients:

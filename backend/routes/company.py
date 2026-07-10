@@ -102,6 +102,9 @@ def _notify_student_application_status(application, drive, status_label):
     if not student or not student.email:
         return MailResult(False, "Student email not found")
 
+    company_user = User.query.get(drive.company_id) if drive else None
+    company = Company.query.filter_by(user_id=drive.company_id).first() if drive else None
+    company_name = company.company_name if company else (company_user.name if company_user else "Company")
     interview_lines = ""
     if application.interview_scheduled_at:
         interview_lines = (
@@ -109,6 +112,23 @@ def _notify_student_application_status(application, drive, status_label):
             f"Date & Time: {_format_interview_time(application.interview_scheduled_at)}\n"
             f"Mode: {application.interview_mode or 'In-person'}\n"
             f"Location/Link: {application.interview_location or drive.location or 'Placement Cell'}\n"
+        )
+
+    if (application.status or "").lower() == "shortlisted":
+        shortlist_interview_text = interview_lines or "Interview details will be shared soon.\n"
+        return send_placement_mail(
+            subject=f"You are shortlisted for {drive.title}",
+            recipients=[student.email],
+            recipient_group="student",
+            deliver_to_actual_recipients=True,
+            body=(
+                f"Hi {student.name},\n\n"
+                f"Congratulations! You have been shortlisted by {company_name} "
+                f"for the '{drive.title}' drive.\n"
+                f"{shortlist_interview_text}\n"
+                f"Please be available on time and check the Placement Portal for updates.\n\n"
+                f"Regards,\nPlacement Portal"
+            ),
         )
 
     return send_placement_mail(
