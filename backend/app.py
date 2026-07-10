@@ -22,7 +22,9 @@ from routes.company import company_bp
 app = Flask(__name__)
 
 # app settings
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///portal.db"
+os.makedirs(app.instance_path, exist_ok=True)
+db_path = os.path.join(app.instance_path, "portal.db")
+app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path.replace(os.sep, '/')}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["JWT_SECRET_KEY"] = os.environ.get("JWT_SECRET_KEY", "super-secret-key")
 app.config["UPLOAD_FOLDER"] = os.path.join(app.root_path, "uploads")
